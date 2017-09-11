@@ -23,6 +23,7 @@ static short size_of_message; // used to remember the size of the string passed 
 static int number_opens = 0; // counts number of times device is opened
 static struct class* char_class = NULL; // device-driver class struct pointer
 static struct device* char_device = NULL; // device-driver device struct pointer
+static DEFINE_MUTEX(char_mutex); // macro to declare new mutex
 
 /*===============================================================================================*/
 // prototypes for character driver -- must come before struct definition
@@ -73,12 +74,19 @@ static int __init onload(void) {
         return PTR_ERR(char_device);
     }
     printk(KERN_INFO "Device class created correctly\n");
+    mutex_init(&char_mutex); // init mutex dynamically
+
     return 0;
 }
 
 /* Prototype Functions*/
 
 static int dev_open(struct inode *inodep, struct file *filep){
+    if(!mutex_trylock(&char_mutex)) { // try to aquire a lock
+        printk(KERN_ALERT "Device in in use by another process");
+        return -EBUSY;
+    }
+
     number_opens++;
     printk(KERN_INFO "Device has been opened %d times(s)\n", number_opens);
     return 0;
@@ -110,6 +118,7 @@ static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, lof
 
 // release device
 static int dev_release(struct inode *inodep, struct file *filep){
+    mutex_unlock(&char_mutex); // release mutex
     printk(KERN_INFO "Device successfully closed\n");
     return 0;
 }
@@ -118,6 +127,7 @@ static int dev_release(struct inode *inodep, struct file *filep){
 // exit function
 static void __exit onunload(void) {
     printk(KERN_INFO "Deregistering LKM\n");
+    mutex_destroy(&char_mutex); // destroy dynamically allocated mutex
     device_destroy(char_class, MKDEV(major_number, 0)); // remove device
     class_unregister(char_class); // unregister device class
     class_destroy(char_class); // remove device class
