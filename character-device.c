@@ -120,7 +120,7 @@ static int dev_open(struct inode *inodep, struct file *filep){
 static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *offset){
     int error_count = 0;
     // copy_to_user has the format (* to, *from, size) and returns 0 on success
-    error_count = copy_to_user(buffer, message, size_of_message);
+    error_count = copy_to_user(buffer, &message, size_of_message);
     
     if (error_count ==  0){
         printk(KERN_INFO "Sent %d characters to the user\n", size_of_message);
@@ -134,10 +134,18 @@ static ssize_t dev_read(struct file *filep, char *buffer, size_t len, loff_t *of
 
 // write to device
 static ssize_t dev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset){
-    sprintf(message, "%s(%zu letters)", buffer, len);   // appending received string with its length
-    size_of_message = strlen(message);                 // store the length of the stored message
-    printk(KERN_INFO "Received %zu characters from the user\n", len);
-    return len;
+    // sprintf(message, "%s(%zu letters)", buffer, len);   // appending received string with its length
+
+    int error_count;
+    error_count = copy_from_user(&message, buffer, len); // using copy_from_user to catch possible buffer errors
+    if (error_count == 0) {
+        sprintf(message, "%s(%zu letters)", message, strlen(message)); // add to existing message
+        size_of_message = strlen(message); // store the length of the stored message 
+        printk(KERN_INFO "Received %zu characters from the user\n", len);
+        return len;
+    } else {
+        return -EFAULT; 
+    }
 }
 
 // release device
